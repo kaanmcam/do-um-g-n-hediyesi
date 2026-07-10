@@ -27,25 +27,97 @@ function successS(){ [540,720,920].forEach((f,i)=>setTimeout(()=>tone(f,.12,'sin
 function boop(){ tone(180,.15,'triangle',.12); }
 function flutter(){ [850,1050,760].forEach((f,i)=>setTimeout(()=>tone(f,.04,'sine',.045),i*35)); }
 function heartbeat(strength=.12){ tone(90,.08,'sine',strength); setTimeout(()=>tone(70,.12,'sine',strength*.85),120); }
-function setMusic(vol, ms=900){ if(!soundOn){ bgm.volume=0; return; } const start=bgm.volume, delta=vol-start, steps=24; let i=0; clearInterval(setMusic._t); setMusic._t=setInterval(()=>{ i++; bgm.volume=Math.max(0,Math.min(1,start+delta*(i/steps))); if(i>=steps) clearInterval(setMusic._t);},ms/steps); }
-function startMusic(){ if(typeof stopSadPiano==='function') stopSadPiano(true); if(!soundOn) return; bgm.volume=0; bgm.play().then(()=>setMusic(.18,1300)).catch(()=>{}); }
-soundBtn.onclick=()=>{ soundOn=!soundOn; soundBtn.textContent=soundOn?'🔊':'🔇'; if(soundOn){ startMusic(); } else { bgm.pause(); } clickS(); };
+function setMusic(vol, ms=900){
+  if(!soundOn){ bgm.volume=0; return; }
+  const start=bgm.volume, delta=vol-start, steps=24;
+  let i=0;
+  clearInterval(setMusic._t);
+  setMusic._t=setInterval(()=>{
+    i++;
+    bgm.volume=Math.max(0,Math.min(1,start+delta*(i/steps)));
+    if(i>=steps) clearInterval(setMusic._t);
+  },ms/steps);
+}
 
 function fadeAudio(el, target, ms=900){
   if(!el) return;
-  const start = el.volume || 0, delta = target - start, steps = 24;
-  let i=0; clearInterval(el._fadeTimer);
-  el._fadeTimer=setInterval(()=>{ i++; el.volume=Math.max(0,Math.min(1,start+delta*(i/steps))); if(i>=steps) clearInterval(el._fadeTimer); }, ms/steps);
+  const start = Number.isFinite(el.volume) ? el.volume : 0;
+  const delta = target - start;
+  const steps = 24;
+  let i=0;
+  clearInterval(el._fadeTimer);
+  el._fadeTimer=setInterval(()=>{
+    i++;
+    el.volume=Math.max(0,Math.min(1,start+delta*(i/steps)));
+    if(i>=steps) clearInterval(el._fadeTimer);
+  },Math.max(16,ms/steps));
 }
+
+function hardStopAudio(el, reset=true){
+  if(!el) return;
+  try{
+    clearInterval(el._fadeTimer);
+    el.pause();
+    if(reset) el.currentTime=0;
+    el.volume=0;
+  }catch(e){}
+}
+
+function stopAllMusic(except=null){
+  const tracks=[
+    bgm,
+    song4,
+    typeof sadAudio!=='undefined' ? sadAudio : null
+  ];
+  tracks.forEach(el=>{
+    if(el && el!==except) hardStopAudio(el,true);
+  });
+}
+
+function startMusic(){
+  if(!soundOn) return;
+  stopAllMusic(bgm);
+  bgm.volume=0;
+  bgm.play().then(()=>setMusic(.18,1300)).catch(()=>{});
+}
+
+soundBtn.onclick=()=>{
+  soundOn=!soundOn;
+  soundBtn.textContent=soundOn?'🔊':'🔇';
+
+  if(soundOn){
+    startMusic();
+  }else{
+    stopAllMusic();
+    if(typeof stopSadPiano==='function') stopSadPiano(true);
+  }
+
+  clickS();
+};
+
 function stopSong4Then(cb){
   if(!song4){ cb&&cb(); return; }
-  fadeAudio(song4,0,1000);
-  setTimeout(()=>{ try{ song4.pause(); }catch(e){}; setMusic(.24,1200); cb&&cb(); },1050);
+
+  fadeAudio(song4,0,650);
+  setTimeout(()=>{
+    hardStopAudio(song4,true);
+
+    if(soundOn){
+      stopAllMusic(bgm);
+      bgm.volume=0;
+      bgm.play().then(()=>setMusic(.24,1200)).catch(()=>{});
+    }
+
+    cb&&cb();
+  },700);
 }
+
 function startSong4(){
-  setMusic(0,1500);
   if(!soundOn || !song4) return;
-  song4.currentTime = 0; song4.volume = 0;
+
+  stopAllMusic(song4);
+  song4.currentTime=0;
+  song4.volume=0;
   song4.play().then(()=>fadeAudio(song4,.22,1800)).catch(()=>{});
 }
 
@@ -828,30 +900,60 @@ function finalCandles(){
   },380);
 }
 let sadAudio=null, sadLoopTimer=null;
+
 function startSadPiano(){
   try{
     clearInterval(sadLoopTimer);
     if(!soundOn) return;
-    if(!sadAudio){ sadAudio=new Audio('assets/music/sad_piano.mp3'); sadAudio.preload='auto'; }
-    sadAudio.currentTime=0; sadAudio.volume=0;
-    sadAudio.play().then(()=>fadeAudio(sadAudio,.20,2400)).catch(()=>{});
+
+    if(!sadAudio){
+      sadAudio=new Audio('assets/music/sad_piano.mp3');
+      sadAudio.preload='auto';
+    }
+
+    stopAllMusic(sadAudio);
+    clearInterval(sadAudio._fadeTimer);
+
+    sadAudio.pause();
+    sadAudio.currentTime=0;
+    sadAudio.volume=0;
+
+    sadAudio.play()
+      .then(()=>fadeAudio(sadAudio,.20,2400))
+      .catch(()=>{});
+
     sadLoopTimer=setInterval(()=>{
-      if(!sadAudio || sadAudio.paused) return;
+      if(!sadAudio || sadAudio.paused || !soundOn) return;
+
       if(sadAudio.currentTime>=79){
-        fadeAudio(sadAudio,0,900);
-        setTimeout(()=>{ if(sadAudio){ sadAudio.currentTime=0; sadAudio.play().catch(()=>{}); fadeAudio(sadAudio,.20,1200); } },920);
+        fadeAudio(sadAudio,0,700);
+
+        setTimeout(()=>{
+          if(!sadAudio || !soundOn) return;
+
+          sadAudio.pause();
+          sadAudio.currentTime=0;
+          sadAudio.volume=0;
+
+          sadAudio.play()
+            .then(()=>fadeAudio(sadAudio,.20,1100))
+            .catch(()=>{});
+        },740);
       }
     },250);
   }catch(e){}
 }
+
 function stopSadPiano(immediate=false){
   clearInterval(sadLoopTimer);
+
   if(!sadAudio) return;
+
   if(immediate){
-    try{ sadAudio.pause(); sadAudio.currentTime=0; sadAudio.volume=0; }catch(e){}
-  } else {
-    fadeAudio(sadAudio,0,1400);
-    setTimeout(()=>{ try{ sadAudio.pause(); sadAudio.currentTime=0; }catch(e){} },1450);
+    hardStopAudio(sadAudio,true);
+  }else{
+    fadeAudio(sadAudio,0,900);
+    setTimeout(()=>hardStopAudio(sadAudio,true),950);
   }
 }
 function finalText(){
@@ -944,11 +1046,14 @@ function finalText(){
 
     const restart=$('#restartGame');
     if(restart) restart.onclick=()=>{
-      clickS();
+      stopAllMusic();
       stopSadPiano(true);
-      try{ bgm.pause(); bgm.currentTime=0; bgm.volume=0; }catch(e){}
+
       collected=0;
       cakeLit=false;
+      soundOn=true;
+      soundBtn.textContent='🔊';
+
       intro();
     };
 

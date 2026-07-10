@@ -61,8 +61,23 @@ function hardStopAudio(el, reset=true){
     clearInterval(el._fadeTimer);
     el.pause();
     if(reset) el.currentTime=0;
+    el.muted=false;
     el.volume=0;
   }catch(e){}
+}
+
+function getMusicTracks(){
+  return [
+    bgm,
+    song4,
+    typeof sadAudio!=='undefined' ? sadAudio : null
+  ].filter(Boolean);
+}
+
+function setAllMusicMuted(muted){
+  getMusicTracks().forEach(el=>{
+    try{ el.muted=muted; }catch(e){}
+  });
 }
 
 function stopAllMusic(except=null, reset=true){
@@ -92,6 +107,7 @@ function startMusic(){
   stopAllMusic(bgm,true);
   markCurrentMusic(bgm,.18);
 
+  bgm.muted=false;
   bgm.volume=0;
   bgm.play().then(()=>setMusic(.18,1300)).catch(()=>{});
 }
@@ -113,26 +129,27 @@ function resumeCurrentMusic(){
 }
 
 soundBtn.onclick=()=>{
+  soundOn=!soundOn;
+  soundBtn.textContent=soundOn?'🔊':'🔇';
+
   if(soundOn){
-    soundOn=false;
-    soundBtn.textContent='🔇';
+    // Telefonda yeniden play() çağırmak yerine sesi açıyoruz.
+    // Böylece iOS/Android otomatik oynatma engeline takılmıyor.
+    setAllMusicMuted(false);
 
-    if(typeof sadLoopTimer!=='undefined'){
-      clearInterval(sadLoopTimer);
-    }
-
-    stopAllMusic(null,false);
-  }else{
-    soundOn=true;
-    soundBtn.textContent='🔊';
-
-    if(currentMusic){
-      resumeCurrentMusic();
-    }else{
+    if(!currentMusic){
       startMusic();
     }
 
-    clickS();
+    try{
+      if(audioCtx && audioCtx.state==='suspended'){
+        audioCtx.resume().catch(()=>{});
+      }
+    }catch(e){}
+  }else{
+    // Müziği durdurma; yalnızca sessize al.
+    // Parça arka planda kaldığı yerden ilerlemeye devam eder.
+    setAllMusicMuted(true);
   }
 };
 
@@ -160,6 +177,7 @@ function startSong4(){
   stopAllMusic(song4,true);
   markCurrentMusic(song4,.22);
   song4.currentTime=0;
+  song4.muted=false;
   song4.volume=0;
   song4.play().then(()=>fadeAudio(song4,.22,1800)).catch(()=>{});
 }
@@ -983,6 +1001,7 @@ function startSadPiano(){
 
     sadAudio.pause();
     sadAudio.currentTime=0;
+    sadAudio.muted=false;
     sadAudio.volume=0;
 
     sadAudio.play()

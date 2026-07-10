@@ -979,7 +979,7 @@ function startSadLoopWatcher(){
         sadAudio.volume=0;
 
         sadAudio.play()
-          .then(()=>fadeAudio(sadAudio,.20,1100))
+          .then(()=>fadeAudio(sadAudio,.11,1100))
           .catch(()=>{});
       },740);
     }
@@ -996,7 +996,7 @@ function startSadPiano(){
     }
 
     stopAllMusic(sadAudio,true);
-    markCurrentMusic(sadAudio,.20);
+    markCurrentMusic(sadAudio,.11);
     clearInterval(sadAudio._fadeTimer);
 
     sadAudio.pause();
@@ -1006,7 +1006,7 @@ function startSadPiano(){
 
     sadAudio.play()
       .then(()=>{
-        fadeAudio(sadAudio,.20,2400);
+        fadeAudio(sadAudio,.11,2400);
         startSadLoopWatcher();
       })
       .catch(()=>{});
@@ -1029,7 +1029,94 @@ function stopSadPiano(immediate=false){
     currentMusic=null;
   }
 }
+
+function ensureCinematicLetterStyles(){
+  if(document.querySelector('#cinematicLetterStyles')) return;
+
+  const style=document.createElement('style');
+  style.id='cinematicLetterStyles';
+  style.textContent=`
+    .letterStepText{
+      min-height:220px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      line-height:1.72;
+    }
+    .letterStepText p{
+      margin:.35em 0;
+      max-width:760px;
+    }
+    .letterChar{
+      display:inline-block;
+      opacity:0;
+      transform:translateY(4px);
+      filter:blur(2px);
+      animation:letterCharIn .34s ease forwards;
+      will-change:opacity,transform,filter;
+    }
+    .letterSpace{
+      display:inline-block;
+      width:.28em;
+    }
+    .letterNextBtn{
+      opacity:0;
+      pointer-events:none;
+      transform:translateY(8px);
+      transition:opacity .55s ease,transform .55s ease;
+    }
+    .letterNextBtn.ready{
+      opacity:1;
+      pointer-events:auto;
+      transform:translateY(0);
+    }
+    .letterWritingDots{
+      height:18px;
+      margin-top:8px;
+      color:rgba(255,235,244,.68);
+      letter-spacing:5px;
+      opacity:0;
+      transition:opacity .25s ease;
+    }
+    .letterWritingDots.show{opacity:1}
+    .finalCandleGlow{
+      transition:filter .8s ease,opacity .8s ease,transform .8s ease;
+    }
+    @keyframes letterCharIn{
+      to{
+        opacity:1;
+        transform:translateY(0);
+        filter:blur(0);
+      }
+    }
+    @media (max-width:700px){
+      .letterStepText{
+        min-height:250px;
+        font-size:clamp(17px,4.5vw,21px);
+        padding:0 8px;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function setFinalPianoLevel(level, ms=900){
+  if(!sadAudio || !soundOn) return;
+  const safe=Math.max(.07,Math.min(.16,level));
+  currentMusicVolume=safe;
+  fadeAudio(sadAudio,safe,ms);
+}
+
+function softWritingTick(index){
+  if(!soundOn || index%3!==0) return;
+  const base=690+(index%7)*11;
+  tone(base,.018,'sine',.012);
+}
+
 function finalText(){
+  ensureCinematicLetterStyles();
   startSadPiano();
   cakeLit=true;
   const pages = [
@@ -1054,6 +1141,7 @@ function finalText(){
       <div class="letterDate">07.07.2026</div>
       <div class="letterStepCounter" id="letterStepCounter">1 / ${pages.length}</div>
       <div class="letterStepText" id="letterStepText"></div>
+      <div class="letterWritingDots" id="letterWritingDots">· · ·</div>
       <button class="btn letterNextBtn" id="letterNextBtn">Sonraki</button>
       <div class="letterEndSign" id="letterEndSign">
         <span>— Kaan Mutlu</span>
@@ -1068,37 +1156,131 @@ function finalText(){
   // render() ekranı 260 ms gecikmeyle kurduğu için DOM elemanlarını burada, kurulduktan sonra bağlıyoruz.
   setTimeout(()=>{
     let page = 0;
+    let typingToken = 0;
+
     const textEl = $('#letterStepText');
     const btn = $('#letterNextBtn');
     const counter = $('#letterStepCounter');
     const glow = $('#finalCandleGlow');
+    const dots = $('#letterWritingDots');
+
+    const pianoLevels = [.09,.09,.10,.095,.10,.105,.11,.105,.125,.105,.115,.12,.085];
+
+    function makeTypedParagraph(line){
+      const p=document.createElement('p');
+
+      [...line].forEach((char,index)=>{
+        if(char===' '){
+          const space=document.createElement('span');
+          space.className='letterSpace';
+          p.appendChild(space);
+          return;
+        }
+
+        const span=document.createElement('span');
+        span.className='letterChar';
+        span.textContent=char;
+        span.dataset.charIndex=String(index);
+        p.appendChild(span);
+      });
+
+      return p;
+    }
+
+    async function typeCurrentPage(token){
+      if(!textEl) return;
+
+      const lines=pages[page].split('\\n');
+      const allChars=[];
+
+      textEl.innerHTML='';
+
+      lines.forEach(line=>{
+        if(!line.trim()){
+          const spacer=document.createElement('div');
+          spacer.style.height='12px';
+          textEl.appendChild(spacer);
+          return;
+        }
+
+        const paragraph=makeTypedParagraph(line);
+        textEl.appendChild(paragraph);
+        allChars.push(...paragraph.querySelectorAll('.letterChar'));
+      });
+
+      if(dots) dots.classList.add('show');
+
+      for(let i=0;i<allChars.length;i++){
+        if(token!==typingToken) return;
+
+        const char=allChars[i];
+        char.style.animation='none';
+        void char.offsetWidth;
+        char.style.animation='letterCharIn .34s ease forwards';
+
+        softWritingTick(i);
+
+        const value=char.textContent;
+        const pause=/[.!?…]/.test(value) ? 95 : /[,;:]/.test(value) ? 55 : 24;
+        await new Promise(resolve=>setTimeout(resolve,pause));
+      }
+
+      if(token!==typingToken) return;
+
+      if(dots) dots.classList.remove('show');
+
+      await new Promise(resolve=>setTimeout(resolve,420));
+
+      if(btn) btn.classList.add('ready');
+    }
 
     function showPage(){
-      if(!textEl) return;
+      if(!textEl || !btn) return;
+
+      typingToken++;
+      const token=typingToken;
       const isLastPage = page === pages.length-1;
+
+      btn.classList.remove('ready');
+      btn.textContent = isLastPage ? 'Mumları Üfle 🤍' : 'Sonraki';
+
       if(glow) glow.classList.toggle('blowReady', isLastPage);
+      if(counter) counter.textContent = `${page+1} / ${pages.length}`;
+
       textEl.classList.remove('show');
-      setTimeout(()=>{
-        textEl.innerHTML = pages[page].split('\n').map(line=> line.trim() ? `<p>${line}</p>` : '<br>').join('');
-        if(counter) counter.textContent = `${page+1} / ${pages.length}`;
-        if(btn) btn.textContent = isLastPage ? 'Mumları Üfle 🤍' : 'Sonraki';
-        textEl.classList.add('show');
-        heartbeat(.055);
-      },180);
+      void textEl.offsetWidth;
+      textEl.classList.add('show');
+
+      setFinalPianoLevel(pianoLevels[page] ?? .10,900);
+      heartbeat(.045);
+
+      typeCurrentPage(token);
     }
 
     function finishLetter(){
+      typingToken++;
+      setFinalPianoLevel(.075,1100);
+
       if(glow){
         glow.classList.add('candlesOut','blownFinal');
         miniFX(glow, glow.clientWidth/2, glow.clientHeight/2, 'spark');
       }
-      tone(160,.18,'sine',.07);
-      setTimeout(()=>tone(120,.24,'sine',.055),160);
+
+      tone(160,.18,'sine',.055);
+      setTimeout(()=>tone(120,.24,'sine',.04),160);
+
       if(textEl) textEl.classList.remove('show');
       if(counter) counter.style.opacity='0';
+      if(dots) dots.classList.remove('show');
+
       const date=$('.letterDate');
       if(date) date.style.opacity='0';
-      if(btn) btn.classList.add('hideLetterBtn');
+
+      if(btn){
+        btn.classList.remove('ready');
+        btn.classList.add('hideLetterBtn');
+      }
+
       setTimeout(()=>{
         const sign=$('#letterEndSign');
         if(sign) sign.classList.add('show');
@@ -1107,7 +1289,10 @@ function finalText(){
 
     if(btn){
       btn.onclick=()=>{
+        if(!btn.classList.contains('ready')) return;
+
         clickS();
+
         if(page < pages.length-1){
           page++;
           showPage();

@@ -7,6 +7,8 @@ const toast = $('#toast');
 let soundOn = true, audioCtx, masterGain;
 let collected = 0;
 let cakeLit = false;
+let currentMusic = null;
+let currentMusicVolume = .18;
 const photos = [
   {src:'assets/photos/photo1.jpg', title:'Mor çizgi', note:'Her güzel hikâye küçük bir çizgiyle başlar...'},
   {src:'assets/photos/photo2.jpg', title:'En huzurlu yer', note:'En huzurlu yer, senin yanındı.'},
@@ -63,36 +65,75 @@ function hardStopAudio(el, reset=true){
   }catch(e){}
 }
 
-function stopAllMusic(except=null){
+function stopAllMusic(except=null, reset=true){
   const tracks=[
     bgm,
     song4,
     typeof sadAudio!=='undefined' ? sadAudio : null
   ];
+
   tracks.forEach(el=>{
-    if(el && el!==except) hardStopAudio(el,true);
+    if(el && el!==except) hardStopAudio(el,reset);
   });
+
+  if(!except && reset){
+    currentMusic=null;
+  }
+}
+
+function markCurrentMusic(el, volume){
+  currentMusic=el;
+  currentMusicVolume=volume;
 }
 
 function startMusic(){
   if(!soundOn) return;
-  stopAllMusic(bgm);
+
+  stopAllMusic(bgm,true);
+  markCurrentMusic(bgm,.18);
+
   bgm.volume=0;
   bgm.play().then(()=>setMusic(.18,1300)).catch(()=>{});
 }
 
-soundBtn.onclick=()=>{
-  soundOn=!soundOn;
-  soundBtn.textContent=soundOn?'🔊':'🔇';
+function resumeCurrentMusic(){
+  if(!soundOn || !currentMusic) return;
 
-  if(soundOn){
-    startMusic();
-  }else{
-    stopAllMusic();
-    if(typeof stopSadPiano==='function') stopSadPiano(true);
+  const el=currentMusic;
+  stopAllMusic(el,false);
+
+  if(el===sadAudio){
+    startSadLoopWatcher();
   }
 
-  clickS();
+  el.volume=0;
+  el.play()
+    .then(()=>fadeAudio(el,currentMusicVolume,900))
+    .catch(()=>{});
+}
+
+soundBtn.onclick=()=>{
+  if(soundOn){
+    soundOn=false;
+    soundBtn.textContent='🔇';
+
+    if(typeof sadLoopTimer!=='undefined'){
+      clearInterval(sadLoopTimer);
+    }
+
+    stopAllMusic(null,false);
+  }else{
+    soundOn=true;
+    soundBtn.textContent='🔊';
+
+    if(currentMusic){
+      resumeCurrentMusic();
+    }else{
+      startMusic();
+    }
+
+    clickS();
+  }
 };
 
 function stopSong4Then(cb){
@@ -103,7 +144,8 @@ function stopSong4Then(cb){
     hardStopAudio(song4,true);
 
     if(soundOn){
-      stopAllMusic(bgm);
+      stopAllMusic(bgm,true);
+      markCurrentMusic(bgm,.24);
       bgm.volume=0;
       bgm.play().then(()=>setMusic(.24,1200)).catch(()=>{});
     }
@@ -115,7 +157,8 @@ function stopSong4Then(cb){
 function startSong4(){
   if(!soundOn || !song4) return;
 
-  stopAllMusic(song4);
+  stopAllMusic(song4,true);
+  markCurrentMusic(song4,.22);
   song4.currentTime=0;
   song4.volume=0;
   song4.play().then(()=>fadeAudio(song4,.22,1800)).catch(()=>{});
@@ -901,9 +944,32 @@ function finalCandles(){
 }
 let sadAudio=null, sadLoopTimer=null;
 
+function startSadLoopWatcher(){
+  clearInterval(sadLoopTimer);
+
+  sadLoopTimer=setInterval(()=>{
+    if(!sadAudio || sadAudio.paused || !soundOn) return;
+
+    if(sadAudio.currentTime>=79){
+      fadeAudio(sadAudio,0,700);
+
+      setTimeout(()=>{
+        if(!sadAudio || !soundOn) return;
+
+        sadAudio.pause();
+        sadAudio.currentTime=0;
+        sadAudio.volume=0;
+
+        sadAudio.play()
+          .then(()=>fadeAudio(sadAudio,.20,1100))
+          .catch(()=>{});
+      },740);
+    }
+  },250);
+}
+
 function startSadPiano(){
   try{
-    clearInterval(sadLoopTimer);
     if(!soundOn) return;
 
     if(!sadAudio){
@@ -911,7 +977,8 @@ function startSadPiano(){
       sadAudio.preload='auto';
     }
 
-    stopAllMusic(sadAudio);
+    stopAllMusic(sadAudio,true);
+    markCurrentMusic(sadAudio,.20);
     clearInterval(sadAudio._fadeTimer);
 
     sadAudio.pause();
@@ -919,28 +986,11 @@ function startSadPiano(){
     sadAudio.volume=0;
 
     sadAudio.play()
-      .then(()=>fadeAudio(sadAudio,.20,2400))
+      .then(()=>{
+        fadeAudio(sadAudio,.20,2400);
+        startSadLoopWatcher();
+      })
       .catch(()=>{});
-
-    sadLoopTimer=setInterval(()=>{
-      if(!sadAudio || sadAudio.paused || !soundOn) return;
-
-      if(sadAudio.currentTime>=79){
-        fadeAudio(sadAudio,0,700);
-
-        setTimeout(()=>{
-          if(!sadAudio || !soundOn) return;
-
-          sadAudio.pause();
-          sadAudio.currentTime=0;
-          sadAudio.volume=0;
-
-          sadAudio.play()
-            .then(()=>fadeAudio(sadAudio,.20,1100))
-            .catch(()=>{});
-        },740);
-      }
-    },250);
   }catch(e){}
 }
 
@@ -954,6 +1004,10 @@ function stopSadPiano(immediate=false){
   }else{
     fadeAudio(sadAudio,0,900);
     setTimeout(()=>hardStopAudio(sadAudio,true),950);
+  }
+
+  if(currentMusic===sadAudio){
+    currentMusic=null;
   }
 }
 function finalText(){
@@ -1046,8 +1100,9 @@ function finalText(){
 
     const restart=$('#restartGame');
     if(restart) restart.onclick=()=>{
-      stopAllMusic();
+      stopAllMusic(null,true);
       stopSadPiano(true);
+      currentMusic=null;
 
       collected=0;
       cakeLit=false;

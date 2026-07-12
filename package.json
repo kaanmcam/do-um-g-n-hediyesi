@@ -1,0 +1,25 @@
+{
+  "name": "doum-gunu-hediyesi",
+  "version": "1.0.0",
+  "description": "Project Kuzum - A birthday gift project",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"No tests specified\"",
+    "dev": "npx serve .",
+    "preview": "npx serve ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kaanmcam/do-um-g-n-hediyesi.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kaanmcam/do-um-g-n-hediyesi/issues"
+  },
+  "homepage": "https://github.com/kaanmcam/do-um-g-n-hediyesi#readme",
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
+  }
+}
